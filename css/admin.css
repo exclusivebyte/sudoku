@@ -1,0 +1,128 @@
+.admin {
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 24px 16px 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.admin-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.admin-head h1 { font-size: 1.6rem; margin-top: 6px; }
+
+.back { color: var(--accent); text-decoration: none; font-size: .9rem; font-weight: 600; }
+
+.who {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: .9rem;
+  color: var(--muted);
+}
+
+.who button {
+  border: none;
+  border-radius: 8px;
+  background: var(--button);
+  padding: 6px 10px;
+}
+
+.panel {
+  background: var(--surface);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  padding: 18px 20px;
+}
+
+.gate {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.gate p { margin: 0; color: var(--muted); line-height: 1.5; }
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.stat {
+  background: var(--surface);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.stat .label { font-size: .85rem; color: var(--muted); }
+
+.stat .value {
+  font-size: 2.2rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -.02em;
+}
+
+.stat:first-child .value { color: var(--accent); }
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.panel-head h2 { margin: 0; font-size: 1.05rem; }
+
+.secondary.small { padding: 6px 12px; font-size: .85rem; }
+
+.table-wrap { overflow-x: auto; }
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: .9rem;
+}
+
+th, td {
+  text-align: left;
+  padding: 10px 8px;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+th { font-size: .78rem; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+
+td .player { display: flex; align-items: center; gap: 10px; }
+td .player img, td .player .initial {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--same);
+  display: grid;
+  place-items: center;
+  font-weight: 600;
+  color: var(--accent);
+  flex: none;
+}
+td .player small { display: block; color: var(--muted); }
+
+.num-col { text-align: right; font-variant-numeric: tabular-nums; }
+
+.hint { color: var(--muted); font-size: .82rem; margin: 10px 0 0; }

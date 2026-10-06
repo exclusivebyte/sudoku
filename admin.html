@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sudoku Admin</title>
+  <meta name="robots" content="noindex">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/admin.css">
+</head>
+<body>
+  <main class="admin">
+    <header class="admin-head">
+      <div>
+        <a class="back" href="./">&larr; Back to game</a>
+        <h1>Admin</h1>
+      </div>
+      <div class="who" id="who"></div>
+    </header>
+
+    <section id="gate" class="panel gate">
+      <p id="gate-text">Loading…</p>
+      <button class="primary" id="signin-btn" hidden>Sign in with Google</button>
+    </section>
+
+    <section id="dashboard" hidden>
+      <div class="stats">
+        <div class="stat"><span class="label">Total players signed up</span><span class="value" id="stat-total">–</span></div>
+        <div class="stat"><span class="label">New in the last 7 days</span><span class="value" id="stat-new">–</span></div>
+        <div class="stat"><span class="label">Active in the last 7 days</span><span class="value" id="stat-active">–</span></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Recent sign-ups</h2>
+          <button class="secondary small" id="refresh-btn">Refresh</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Player</th><th>Joined</th><th>Last played</th><th class="num-col">Levels done</th></tr>
+            </thead>
+            <tbody id="users"></tbody>
+          </table>
+        </div>
+        <p class="hint" id="table-note"></p>
+      </div>
+    </section>
+  </main>
+  <script type="module" src="js/admin.js"></script>
+</body>
+</html>

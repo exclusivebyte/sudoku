@@ -1,10 +1,15 @@
 import { solve, PEERS, ROW, COL, DIFFICULTIES } from './sudoku.js';
 import { LEVELS } from './levels.js';
+import * as cloud from './cloud.js';
 
-const LEVEL_KEY = 'sudoku.level';        // index of the level being played
-const PROGRESS_KEY = 'sudoku.progress';  // { [level]: in-progress game }
-const DONE_KEY = 'sudoku.completed';     // { [level]: { time, mistakes, hints } }
+// Used only when sign-in isn't configured: progress is kept on this device.
+const LEVEL_KEY = 'sudoku.level';
+const PROGRESS_KEY = 'sudoku.progress';
+const DONE_KEY = 'sudoku.completed';
 const THEME_KEY = 'sudoku.theme';
+const LAST_UID_KEY = 'sudoku.lastUid';           // last signed-in account on this device
+const accountCacheKey = (uid) => `sudoku.account.${uid}`;
+const CLOUD_SAVE_DELAY = 8000;                   // batch cloud writes while playing
 
 const $ = (id) => document.getElementById(id);
 const boardEl = $('board');
@@ -14,7 +19,11 @@ const mistakesEl = $('mistakes');
 const notesBtn = $('notes-btn');
 const pauseOverlay = $('pause-overlay');
 
-let state = null;      // current game, persisted
+let state = null;      // the puzzle being played
+let user = null;       // signed-in account, or null for a guest
+let cloudTimer = null;
+// All saved progress: { level, progress: { [level]: game }, completed: { [level]: result }, updatedAt }.
+let game = emptyGame();
 let selected = -1;     // selected cell index
 let notesMode = false;
 let paused = false;
@@ -33,13 +42,77 @@ function store(key, value) {
   try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* ignore */ }
 }
 
+// ---------- Saved progress ----------
+function emptyGame() {
+  return { level: 0, progress: {}, completed: {}, updatedAt: 0 };
+}
+
+// Copy of the saved progress without undo history (keeps cloud documents small).
+function compact(g) {
+  const progress = {};
+  for (const [k, p] of Object.entries(g.progress)) {
+    const { history, ...rest } = p;
+    progress[k] = rest;
+  }
+  return { level: g.level, progress, completed: g.completed, updatedAt: g.updatedAt };
+}
+
+// Saves `game` where it belongs: this device when sign-in isn't set up,
+// the player's account when signed in, nowhere for guests.
+function persist({ cloudNow = false, skipCloud = false } = {}) {
+  game.updatedAt = Date.now();
+  if (!cloud.isConfigured()) {
+    store(LEVEL_KEY, game.level);
+    store(PROGRESS_KEY, game.progress);
+    store(DONE_KEY, game.completed);
+    return;
+  }
+  if (!user) return;
+  store(accountCacheKey(user.uid), compact(game));
+  if (skipCloud) return;
+  clearTimeout(cloudTimer);
+  cloudTimer = setTimeout(pushToCloud, cloudNow ? 0 : CLOUD_SAVE_DELAY);
+}
+
+async function pushToCloud() {
+  clearTimeout(cloudTimer);
+  cloudTimer = null;
+  if (!user || user.pending) return;
+  try {
+    await cloud.saveUserData(user, compact(game));
+    setSyncStatus('saved');
+  } catch (err) {
+    console.warn('Cloud save failed', err);
+    setSyncStatus('offline');
+  }
+}
+
+function flushCloud() {
+  if (cloudTimer) pushToCloud();
+}
+
+// Combines two sets of progress: best time per completed level, furthest game per level.
+function mergeGames(a, b) {
+  const out = { level: b.level, progress: { ...a.progress }, completed: { ...a.completed }, updatedAt: Date.now() };
+  for (const [k, r] of Object.entries(b.completed)) {
+    if (!out.completed[k] || r.time < out.completed[k].time) out.completed[k] = r;
+  }
+  for (const [k, p] of Object.entries(b.progress)) {
+    if (!out.progress[k] || p.elapsed > out.progress[k].elapsed) out.progress[k] = p;
+  }
+  for (const k of Object.keys(out.completed)) delete out.progress[k];
+  return out;
+}
+
+const hasAnything = (g) => Object.keys(g.progress).length > 0 || Object.keys(g.completed).length > 0;
+
 // ---------- Game lifecycle ----------
 // Opens a level, resuming any saved progress on it unless `fresh` is set.
 function openLevel(level, fresh = false) {
   level = Math.max(0, Math.min(LEVELS.length - 1, level));
   const [difficulty, digits] = LEVELS[level];
   const puzzle = [...digits].map(Number);
-  const saved = fresh ? null : load(PROGRESS_KEY, {})[level];
+  const saved = fresh ? null : game.progress[level];
   state = {
     level,
     difficulty,
@@ -51,32 +124,30 @@ function openLevel(level, fresh = false) {
     mistakes: saved?.mistakes ?? 0,
     hints: saved?.hints ?? 0,
     history: saved?.history ?? [],
+    started: !!saved,
     solved: false,
   };
   selected = -1;
   boardEl.classList.remove('solved');
-  store(LEVEL_KEY, level);
-  if (fresh) clearProgress(level);
+  game.level = level;
+  if (fresh) delete game.progress[level];
+  persist();
   setPaused(false);
   render();
 }
 
-function save() {
-  if (!state || state.solved || !state.history.length) return;
-  const progress = load(PROGRESS_KEY, {});
+// Records the current puzzle into `game`. Timer ticks only update the local copy.
+function save({ tick = false } = {}) {
+  if (!state || state.solved) return;
+  if (state.history.length) state.started = true;
+  if (!state.started) return;
   const { values, notes, elapsed, mistakes, hints, history } = state;
-  progress[state.level] = { values, notes, elapsed, mistakes, hints, history };
-  store(PROGRESS_KEY, progress);
-}
-
-function clearProgress(level) {
-  const progress = load(PROGRESS_KEY, {});
-  delete progress[level];
-  store(PROGRESS_KEY, progress);
+  game.progress[state.level] = { values, notes, elapsed, mistakes, hints, history };
+  persist({ skipCloud: tick });
 }
 
 function isInProgress() {
-  return state && !state.solved && state.history.length > 0;
+  return state && !state.solved && state.started;
 }
 
 async function confirmRestart() {
@@ -147,6 +218,7 @@ function erase() {
 function undo() {
   if (!state.history.length || state.solved || paused) return;
   const prev = state.history.pop();
+  state.started = true;
   for (const { i, v, n } of prev) {
     state.values[i] = v;
     state.notes[i] = n;
@@ -191,15 +263,13 @@ function afterMove() {
 function win() {
   state.solved = true;
   stopTimer();
-  clearProgress(state.level);
+  delete game.progress[state.level];
 
-  const done = load(DONE_KEY, {});
+  const done = game.completed;
   const prev = done[state.level];
   const isRecord = !prev || state.elapsed < prev.time;
-  if (isRecord) {
-    done[state.level] = { time: state.elapsed, mistakes: state.mistakes, hints: state.hints };
-    store(DONE_KEY, done);
-  }
+  if (isRecord) done[state.level] = { time: state.elapsed, mistakes: state.mistakes, hints: state.hints };
+  persist({ cloudNow: true });
   boardEl.classList.add('solved');
 
   const parts = [`Solved in ${formatTime(state.elapsed)}`];
@@ -241,7 +311,7 @@ function startTimer() {
   ticker = setInterval(() => {
     state.elapsed++;
     timerEl.textContent = formatTime(state.elapsed);
-    if (state.elapsed % 5 === 0) save();
+    if (state.elapsed % 5 === 0) save({ tick: true });
   }, 1000);
 }
 
@@ -255,7 +325,7 @@ function setPaused(p) {
   pauseOverlay.hidden = !paused;
   timerEl.classList.toggle('paused', paused);
   boardEl.style.visibility = paused ? 'hidden' : '';
-  if (paused) { stopTimer(); save(); } else startTimer();
+  if (paused) { stopTimer(); save({ tick: true }); } else startTimer();
 }
 
 // ---------- Rendering ----------
@@ -428,8 +498,8 @@ $('win-dialog').addEventListener('close', () => {
 // ---------- Level picker ----------
 function showLevels() {
   save();
-  const done = load(DONE_KEY, {});
-  const progress = load(PROGRESS_KEY, {});
+  const done = game.completed;
+  const progress = game.progress;
   const list = $('levels-list');
   list.textContent = '';
 
@@ -473,7 +543,7 @@ function showLevels() {
 
 // Show the next unfinished level after the one just completed.
 function nextUnfinished(from) {
-  const done = load(DONE_KEY, {});
+  const done = game.completed;
   for (let k = 1; k <= LEVELS.length; k++) {
     const i = (from + k) % LEVELS.length;
     if (!done[i]) return i;
@@ -486,13 +556,14 @@ let autoPaused = false;
 document.addEventListener('visibilitychange', () => {
   if (!state || state.solved) return;
   if (document.hidden) {
+    flushCloud();
     if (!paused) { autoPaused = true; setPaused(true); }
   } else if (autoPaused) {
     autoPaused = false;
     setPaused(false);
   }
 });
-window.addEventListener('pagehide', save);
+window.addEventListener('pagehide', () => { save(); flushCloud(); });
 
 // ---------- Theme ----------
 function applyTheme(theme) {
@@ -508,17 +579,145 @@ $('theme-btn').addEventListener('click', () => {
   store(THEME_KEY, next);
 });
 
+// ---------- Accounts ----------
+const accountBtn = $('account-btn');
+const accountDialog = $('account-dialog');
+
+function setSyncStatus(status) {
+  const el = $('sync-status');
+  if (!el) return;
+  el.textContent = status === 'offline'
+    ? "Couldn't reach the server — progress is kept on this device and will sync later."
+    : 'Your progress is saved to your Google account.';
+  el.classList.toggle('warn', status === 'offline');
+}
+
+function renderAccount() {
+  const configured = cloud.isConfigured();
+  accountBtn.hidden = !configured;
+  $('guest-note').hidden = !configured || !!user;
+  if (!configured) return;
+
+  if (user) {
+    accountBtn.classList.add('signed-in');
+    accountBtn.title = `Signed in as ${user.email}`;
+    accountBtn.innerHTML = user.photo
+      ? `<img src="${encodeURI(user.photo)}" alt="" referrerpolicy="no-referrer">`
+      : `<span class="initial">${(user.name || '?')[0].toUpperCase()}</span>`;
+  } else {
+    accountBtn.classList.remove('signed-in');
+    accountBtn.title = 'Sign in with Google';
+    accountBtn.textContent = 'Sign in';
+  }
+}
+
+function openAccountDialog() {
+  if (!user || user.pending) { doSignIn(); return; }
+  $('account-name').textContent = user.name;
+  $('account-email').textContent = user.email;
+  $('admin-link').hidden = !user.isAdmin;
+  accountDialog.showModal();
+}
+
+async function doSignIn() {
+  try {
+    await cloud.signIn();
+  } catch (err) {
+    console.error(err);
+    alert(`Sign-in failed: ${err?.message || err}`);
+  }
+}
+
+function reopenCurrent() {
+  const level = game.level ?? 0;
+  openLevel(game.completed[level] && !game.progress[level] ? nextUnfinished(level) : level);
+}
+
+async function handleUserChanged(next) {
+  if (!next) {
+    if (user) {
+      // Signed out: drop back to a fresh guest session.
+      flushCloud();
+      user = null;
+      try { localStorage.removeItem(LAST_UID_KEY); } catch { /* ignore */ }
+      game = emptyGame();
+      reopenCurrent();
+    }
+    renderAccount();
+    return;
+  }
+  if (user && !user.pending && user.uid === next.uid) return;
+
+  const guestGame = user ? null : game; // progress made before signing in
+  user = next;
+  store(LAST_UID_KEY, next.uid);
+  renderAccount();
+
+  const cached = load(accountCacheKey(next.uid));
+  let remote = null;
+  let reachable = true;
+  try {
+    remote = await cloud.loadUserData(next);
+  } catch (err) {
+    console.warn('Could not load cloud progress', err);
+    reachable = false;
+  }
+
+  // Use whichever copy is newer, then fold in anything played as a guest.
+  let merged = [remote, cached].filter(Boolean).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))[0];
+  merged = merged ? { ...emptyGame(), ...merged } : emptyGame();
+  if (guestGame && hasAnything(guestGame)) merged = mergeGames(merged, guestGame);
+
+  const changed = JSON.stringify(compact(merged)) !== JSON.stringify(remote && compact({ ...emptyGame(), ...remote }));
+  game = merged;
+  for (const k of [LEVEL_KEY, PROGRESS_KEY, DONE_KEY]) {
+    try { localStorage.removeItem(k); } catch { /* ignore */ }
+  }
+  if (!state || !isInProgress() || guestGame) reopenCurrent();
+  else save();
+  if (changed) persist({ cloudNow: true });
+  setSyncStatus(reachable ? 'saved' : 'offline');
+}
+
+accountBtn.addEventListener('click', openAccountDialog);
+$('guest-signin').addEventListener('click', doSignIn);
+$('signout-btn').addEventListener('click', async () => {
+  accountDialog.close();
+  await pushToCloud();
+  await cloud.signOut();
+});
+
 // ---------- Boot ----------
 applyTheme(load(THEME_KEY));
 buildBoard();
 
-{
-  const level = load(LEVEL_KEY, 0);
-  const done = load(DONE_KEY, {});
-  const hasProgress = load(PROGRESS_KEY, {})[level];
-  // Reopen the last level; if it's already finished, move on to the next unfinished one.
-  openLevel(done[level] && !hasProgress ? nextUnfinished(level) : level);
+if (!cloud.isConfigured()) {
+  // No sign-in available: keep progress on this device.
+  game = { ...emptyGame(), level: load(LEVEL_KEY, 0), progress: load(PROGRESS_KEY, {}), completed: load(DONE_KEY, {}) };
+} else {
+  // Show the last signed-in account's progress straight away; Firebase confirms the session shortly.
+  const lastUid = load(LAST_UID_KEY);
+  const cached = lastUid && load(accountCacheKey(lastUid));
+  if (cached) {
+    game = { ...emptyGame(), ...cached };
+    user = { uid: lastUid, pending: true };
+  } else {
+    // Progress saved on this device before sign-in existed: offer it up as guest progress,
+    // so it's carried into the account on first sign-in.
+    const legacy = { ...emptyGame(), level: load(LEVEL_KEY, 0), progress: load(PROGRESS_KEY, {}), completed: load(DONE_KEY, {}) };
+    if (hasAnything(legacy)) game = legacy;
+  }
 }
+renderAccount();
+reopenCurrent();
+
+cloud.onUserChanged((u) => {
+  handleUserChanged(u).catch((err) => console.error(err));
+}).catch((err) => {
+  console.warn('Sign-in unavailable', err);
+  if (user?.pending) user = null;
+  renderAccount();
+});
 
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   navigator.serviceWorker.register('sw.js').catch(() => {});

@@ -29,6 +29,7 @@
       <div class="status">
         <span class="mistakes" id="mistakes" title="Mistakes">Mistakes: 0</span>
         <button class="timer" id="timer" title="Pause / resume" aria-label="Pause or resume">00:00</button>
+        <button class="account-btn" id="account-btn" hidden>Sign in</button>
         <button class="icon-btn" id="theme-btn" title="Toggle theme" aria-label="Toggle theme">
           <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z"/></svg>
         </button>
@@ -63,6 +64,10 @@
         </button>
       </div>
       <div class="numpad" id="numpad"></div>
+      <p class="guest-note" id="guest-note" hidden>
+        Playing as a guest — progress isn't saved.
+        <button class="link" id="guest-signin">Sign in with Google</button>
+      </p>
       <div class="bottom-row">
         <button class="secondary" id="restart-btn">Restart</button>
         <button class="primary" id="levels-btn">All levels</button>
@@ -85,6 +90,17 @@
     <form method="dialog" class="dialog-actions">
       <button value="cancel">Cancel</button>
       <button class="primary" value="ok">Restart</button>
+    </form>
+  </dialog>
+
+  <dialog id="account-dialog">
+    <h2 id="account-name"></h2>
+    <p class="account-email" id="account-email"></p>
+    <p class="sync-status" id="sync-status">Your progress is saved to your Google account.</p>
+    <form method="dialog" class="dialog-actions">
+      <a class="secondary" id="admin-link" href="admin.html" hidden>Admin panel</a>
+      <button type="button" id="signout-btn">Sign out</button>
+      <button class="primary" value="close">Done</button>
     </form>
   </dialog>
 

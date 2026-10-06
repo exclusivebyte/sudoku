@@ -16,6 +16,9 @@ No build step, no dependencies — just HTML, CSS and JavaScript.
 - Highlights the selected row, column, box and matching numbers
 - Timer that pauses automatically when you switch away
 - Everything is saved automatically — close it and pick up where you left off
+- Sign in with Google to save progress to your account and carry it across devices
+  (guests can play, but their progress isn't saved)
+- Admin panel (`admin.html`) showing how many players have signed up
 - Light and dark themes (follows your system by default)
 - Works offline and installs as a standalone app (PWA)
 
@@ -46,6 +49,25 @@ Once it's hosted (see below), open the site and:
 A workflow in `.github/workflows/pages.yml` deploys the site on every push to `main`.
 One-time setup: in the repo go to **Settings → Pages** and set **Source** to **GitHub Actions**.
 The game will then be live at `https://<your-username>.github.io/sudoku/`.
+
+## Google sign-in and the admin panel (Firebase)
+
+Sign-in and cloud saves use [Firebase](https://firebase.google.com) (free tier is plenty).
+Until `js/firebase-config.js` has a config, sign-in is hidden and progress is saved on the device.
+
+1. Go to https://console.firebase.google.com → **Create a project** (Google Analytics not needed).
+2. **Build → Authentication → Get started → Sign-in method → Google → Enable**, pick a support email, **Save**.
+3. **Authentication → Settings → Authorized domains → Add domain:** `exclusivebyte.github.io`.
+4. **Build → Firestore Database → Create database** (any location, start in **production mode**).
+   Then open the **Rules** tab, paste the contents of [`firestore.rules`](firestore.rules) and **Publish**.
+5. **Project settings (⚙) → Your apps → Web (`</>`)** → register an app (no hosting needed) and copy the
+   `firebaseConfig` object into `js/firebase-config.js`.
+
+The admin account is set in two places — `ADMIN_EMAILS` in `js/firebase-config.js` (shows the admin link)
+and `isAdmin()` in `firestore.rules` (actually grants access). Keep them in sync.
+
+Each signed-in player has one document at `users/{uid}` holding their profile, sign-up date, last-played
+time, number of levels completed and their saved game.
 
 ## Levels
 

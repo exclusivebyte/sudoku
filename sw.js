@@ -1,5 +1,5 @@
 // Offline support: cache the app shell, serve cache-first, refresh in the background.
-const CACHE = 'sudoku-v2';
+const CACHE = 'sudoku-v3';
 const ASSETS = [
   './',
   'index.html',
@@ -7,6 +7,8 @@ const ASSETS = [
   'js/app.js',
   'js/sudoku.js',
   'js/levels.js',
+  'js/cloud.js',
+  'js/firebase-config.js',
   'manifest.webmanifest',
   'icons/icon.svg',
   'icons/icon-192.png',
@@ -26,20 +28,28 @@ self.addEventListener('activate', (event) => {
   );
 });
 
+// The app's own files: network first (so updates arrive straight away), cache when offline.
+// The Firebase SDK is versioned, so it's served from cache once fetched.
+// Sign-in and database traffic isn't touched.
 self.addEventListener('fetch', (event) => {
-  if (event.request.method !== 'GET') return;
+  const { request } = event;
+  if (request.method !== 'GET') return;
+  const url = new URL(request.url);
+  const own = url.origin === location.origin && !url.pathname.includes('/__/');
+  const sdk = url.hostname === 'www.gstatic.com' && url.pathname.startsWith('/firebasejs/');
+  if (!own && !sdk) return;
+
+  const fromNetwork = () => fetch(request).then((res) => {
+    if (res.ok) {
+      const copy = res.clone();
+      caches.open(CACHE).then((c) => c.put(request, copy));
+    }
+    return res;
+  });
+
   event.respondWith(
-    caches.match(event.request, { ignoreSearch: true }).then((cached) => {
-      const network = fetch(event.request)
-        .then((res) => {
-          if (res.ok && new URL(event.request.url).origin === location.origin) {
-            const copy = res.clone();
-            caches.open(CACHE).then((c) => c.put(event.request, copy));
-          }
-          return res;
-        })
-        .catch(() => cached);
-      return cached || network;
-    })
+    sdk
+      ? caches.match(request).then((hit) => hit || fromNetwork())
+      : fromNetwork().catch(() => caches.match(request, { ignoreSearch: true }).then((hit) => hit || caches.match('./')))
   );
 });
