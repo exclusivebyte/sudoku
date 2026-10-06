@@ -21,12 +21,10 @@
     <header class="topbar">
       <div class="title">
         <h1>Sudoku</h1>
-        <select id="difficulty" aria-label="Difficulty">
-          <option value="easy">Easy</option>
-          <option value="medium">Medium</option>
-          <option value="hard">Hard</option>
-          <option value="expert">Expert</option>
-        </select>
+        <button class="level-btn" id="level-btn" title="Choose a level">
+          <span id="level-name">Level 1</span>
+          <span class="tag" id="level-tag">Easy</span>
+        </button>
       </div>
       <div class="status">
         <span class="mistakes" id="mistakes" title="Mistakes">Mistakes: 0</span>
@@ -65,25 +63,40 @@
         </button>
       </div>
       <div class="numpad" id="numpad"></div>
-      <button class="primary new-game" id="new-btn">New game</button>
+      <div class="bottom-row">
+        <button class="secondary" id="restart-btn">Restart</button>
+        <button class="primary" id="levels-btn">All levels</button>
+      </div>
     </section>
   </main>
 
   <dialog id="win-dialog">
-    <h2>Solved!</h2>
+    <h2 id="win-title">Solved!</h2>
     <p id="win-text"></p>
     <form method="dialog" class="dialog-actions">
-      <button class="primary" value="new">New game</button>
+      <button value="levels">All levels</button>
+      <button class="primary" value="next" id="next-btn">Next level</button>
     </form>
   </dialog>
 
   <dialog id="confirm-dialog">
-    <h2>Start a new game?</h2>
-    <p>Your current progress will be lost.</p>
+    <h2>Restart this level?</h2>
+    <p>Your progress on this puzzle will be cleared.</p>
     <form method="dialog" class="dialog-actions">
       <button value="cancel">Cancel</button>
-      <button class="primary" value="ok">New game</button>
+      <button class="primary" value="ok">Restart</button>
     </form>
+  </dialog>
+
+  <dialog id="levels-dialog" class="levels-dialog">
+    <div class="levels-head">
+      <div>
+        <h2>Levels</h2>
+        <p id="levels-summary"></p>
+      </div>
+      <form method="dialog"><button class="icon-btn" value="close" aria-label="Close">&times;</button></form>
+    </div>
+    <div class="levels-list" id="levels-list"></div>
   </dialog>
 
   <script type="module" src="js/app.js"></script>

@@ -1,11 +1,12 @@
 // Offline support: cache the app shell, serve cache-first, refresh in the background.
-const CACHE = 'sudoku-v1';
+const CACHE = 'sudoku-v2';
 const ASSETS = [
   './',
   'index.html',
   'css/style.css',
   'js/app.js',
   'js/sudoku.js',
+  'js/levels.js',
   'manifest.webmanifest',
   'icons/icon.svg',
   'icons/icon-192.png',

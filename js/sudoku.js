@@ -109,9 +109,10 @@ export const DIFFICULTIES = {
 
 // Generates a puzzle with a unique solution. Removes cells in random
 // (symmetric) pairs while the solution stays unique, until the clue target
-// for the difficulty is reached or no more cells can be removed.
-export function generate(difficulty = 'medium') {
-  const target = (DIFFICULTIES[difficulty] || DIFFICULTIES.medium).clues;
+// for the difficulty (or an explicit `clues` count) is reached or no more
+// cells can be removed.
+export function generate(difficulty = 'medium', clues) {
+  const target = clues || (DIFFICULTIES[difficulty] || DIFFICULTIES.medium).clues;
   let best = null;
 
   // A few attempts; keep whichever got closest to the target.

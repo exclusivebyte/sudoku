@@ -1,16 +1,16 @@
-import { generate, PEERS, ROW, COL, DIFFICULTIES } from './sudoku.js';
+import { solve, PEERS, ROW, COL, DIFFICULTIES } from './sudoku.js';
+import { LEVELS } from './levels.js';
 
-const SAVE_KEY = 'sudoku.game';
-const BEST_KEY = 'sudoku.best';
+const LEVEL_KEY = 'sudoku.level';        // index of the level being played
+const PROGRESS_KEY = 'sudoku.progress';  // { [level]: in-progress game }
+const DONE_KEY = 'sudoku.completed';     // { [level]: { time, mistakes, hints } }
 const THEME_KEY = 'sudoku.theme';
-const DIFF_KEY = 'sudoku.difficulty';
 
 const $ = (id) => document.getElementById(id);
 const boardEl = $('board');
 const numpadEl = $('numpad');
 const timerEl = $('timer');
 const mistakesEl = $('mistakes');
-const difficultyEl = $('difficulty');
 const notesBtn = $('notes-btn');
 const pauseOverlay = $('pause-overlay');
 
@@ -34,37 +34,52 @@ function store(key, value) {
 }
 
 // ---------- Game lifecycle ----------
-function newGame(difficulty) {
-  const { puzzle, solution } = generate(difficulty);
+// Opens a level, resuming any saved progress on it unless `fresh` is set.
+function openLevel(level, fresh = false) {
+  level = Math.max(0, Math.min(LEVELS.length - 1, level));
+  const [difficulty, digits] = LEVELS[level];
+  const puzzle = [...digits].map(Number);
+  const saved = fresh ? null : load(PROGRESS_KEY, {})[level];
   state = {
+    level,
     difficulty,
     puzzle,
-    solution,
-    values: puzzle.slice(),
-    notes: new Array(81).fill(0),
-    elapsed: 0,
-    mistakes: 0,
-    hints: 0,
-    history: [],
+    solution: solve(puzzle),
+    values: saved?.values ?? puzzle.slice(),
+    notes: saved?.notes ?? new Array(81).fill(0),
+    elapsed: saved?.elapsed ?? 0,
+    mistakes: saved?.mistakes ?? 0,
+    hints: saved?.hints ?? 0,
+    history: saved?.history ?? [],
     solved: false,
   };
   selected = -1;
   boardEl.classList.remove('solved');
-  store(DIFF_KEY, difficulty);
-  save();
+  store(LEVEL_KEY, level);
+  if (fresh) clearProgress(level);
   setPaused(false);
   render();
 }
 
 function save() {
-  if (state) store(SAVE_KEY, state);
+  if (!state || state.solved || !state.history.length) return;
+  const progress = load(PROGRESS_KEY, {});
+  const { values, notes, elapsed, mistakes, hints, history } = state;
+  progress[state.level] = { values, notes, elapsed, mistakes, hints, history };
+  store(PROGRESS_KEY, progress);
+}
+
+function clearProgress(level) {
+  const progress = load(PROGRESS_KEY, {});
+  delete progress[level];
+  store(PROGRESS_KEY, progress);
 }
 
 function isInProgress() {
   return state && !state.solved && state.history.length > 0;
 }
 
-async function confirmNewGame() {
+async function confirmRestart() {
   if (!isInProgress()) return true;
   const dlg = $('confirm-dialog');
   dlg.returnValue = '';
@@ -176,24 +191,30 @@ function afterMove() {
 function win() {
   state.solved = true;
   stopTimer();
-  const best = load(BEST_KEY, {});
-  const prevBest = best[state.difficulty];
-  const isRecord = !state.hints && (prevBest == null || state.elapsed < prevBest);
+  clearProgress(state.level);
+
+  const done = load(DONE_KEY, {});
+  const prev = done[state.level];
+  const isRecord = !prev || state.elapsed < prev.time;
   if (isRecord) {
-    best[state.difficulty] = state.elapsed;
-    store(BEST_KEY, best);
+    done[state.level] = { time: state.elapsed, mistakes: state.mistakes, hints: state.hints };
+    store(DONE_KEY, done);
   }
   boardEl.classList.add('solved');
 
-  const label = DIFFICULTIES[state.difficulty].label;
-  const parts = [`${label} puzzle solved in ${formatTime(state.elapsed)}`];
+  const parts = [`Solved in ${formatTime(state.elapsed)}`];
   parts.push(state.mistakes === 1 ? 'with 1 mistake' : `with ${state.mistakes} mistakes`);
   if (state.hints) parts.push(`and ${state.hints} hint${state.hints > 1 ? 's' : ''}`);
   let text = parts.join(' ') + '.';
-  if (isRecord && prevBest != null) text += ' New best time!';
-  else if (isRecord) text += ' First win at this level!';
-  else if (prevBest != null) text += ` Best: ${formatTime(prevBest)}.`;
+  if (prev && isRecord) text += ' New best time!';
+  else if (prev) text += ` Your best: ${formatTime(prev.time)}.`;
+  const count = Object.keys(done).length;
+  text += ` ${count} of ${LEVELS.length} levels complete.`;
+
+  const last = state.level === LEVELS.length - 1;
+  $('win-title').textContent = `Level ${state.level + 1} solved!`;
   $('win-text').textContent = text;
+  $('next-btn').hidden = last;
   setTimeout(() => $('win-dialog').showModal(), 700);
 }
 
@@ -324,7 +345,10 @@ function render() {
   $('notes-state').textContent = notesMode ? 'on' : 'off';
   mistakesEl.textContent = `Mistakes: ${state.mistakes}`;
   timerEl.textContent = formatTime(state.elapsed);
-  difficultyEl.value = state.difficulty;
+  $('level-name').textContent = `Level ${state.level + 1}`;
+  const tag = $('level-tag');
+  tag.textContent = DIFFICULTIES[state.difficulty].label;
+  tag.className = `tag ${state.difficulty}`;
   $('undo-btn').disabled = !state.history.length || state.solved;
 }
 
@@ -343,7 +367,6 @@ function moveSelection(dr, dc) {
 
 document.addEventListener('keydown', (e) => {
   if (document.querySelector('dialog[open]')) return;
-  if (e.target === difficultyEl) return;
 
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
     e.preventDefault();
@@ -389,19 +412,74 @@ notesBtn.addEventListener('click', toggleNotes);
 timerEl.addEventListener('click', () => setPaused(!paused));
 $('resume-btn').addEventListener('click', () => setPaused(false));
 
-$('new-btn').addEventListener('click', async () => {
-  if (await confirmNewGame()) newGame(difficultyEl.value);
+$('restart-btn').addEventListener('click', async () => {
+  if (await confirmRestart()) openLevel(state.level, true);
 });
 
-difficultyEl.addEventListener('change', async () => {
-  if (await confirmNewGame()) newGame(difficultyEl.value);
-  else difficultyEl.value = state.difficulty;
-  difficultyEl.blur();
-});
+$('level-btn').addEventListener('click', showLevels);
+$('levels-btn').addEventListener('click', showLevels);
 
 $('win-dialog').addEventListener('close', () => {
-  if ($('win-dialog').returnValue === 'new') newGame(difficultyEl.value);
+  const choice = $('win-dialog').returnValue;
+  if (choice === 'next') openLevel(state.level + 1);
+  else if (choice === 'levels') showLevels();
 });
+
+// ---------- Level picker ----------
+function showLevels() {
+  save();
+  const done = load(DONE_KEY, {});
+  const progress = load(PROGRESS_KEY, {});
+  const list = $('levels-list');
+  list.textContent = '';
+
+  let grid = null;
+  let group = null;
+  LEVELS.forEach(([difficulty], i) => {
+    if (difficulty !== group) {
+      group = difficulty;
+      const members = LEVELS.map((l, k) => k).filter((k) => LEVELS[k][0] === difficulty);
+      const finished = members.filter((k) => done[k]).length;
+      const h = document.createElement('h3');
+      h.innerHTML = `<span class="tag ${difficulty}">${DIFFICULTIES[difficulty].label}</span>` +
+        `<small>${finished} / ${members.length}</small>`;
+      grid = document.createElement('div');
+      grid.className = 'level-grid';
+      list.append(h, grid);
+    }
+    const b = document.createElement('button');
+    b.className = 'level';
+    b.textContent = i + 1;
+    if (done[i]) {
+      b.classList.add('done');
+      b.title = `Best time ${formatTime(done[i].time)}`;
+    } else if (progress[i]) {
+      b.classList.add('started');
+      b.title = 'In progress';
+    }
+    if (i === state.level) b.classList.add('current');
+    b.addEventListener('click', () => {
+      $('levels-dialog').close();
+      if (i !== state.level || state.solved) openLevel(i);
+    });
+    grid.appendChild(b);
+  });
+
+  const count = Object.keys(done).length;
+  $('levels-summary').textContent = `${count} of ${LEVELS.length} complete`;
+  $('levels-dialog').showModal();
+  list.querySelector('.level.current')?.scrollIntoView({ block: 'center' });
+}
+
+// Show the next unfinished level after the one just completed.
+function nextUnfinished(from) {
+  const done = load(DONE_KEY, {});
+  for (let k = 1; k <= LEVELS.length; k++) {
+    const i = (from + k) % LEVELS.length;
+    if (!done[i]) return i;
+  }
+  return from;
+}
 
 // Pause automatically when the window is hidden; resume when it's back.
 let autoPaused = false;
@@ -434,13 +512,12 @@ $('theme-btn').addEventListener('click', () => {
 applyTheme(load(THEME_KEY));
 buildBoard();
 
-const saved = load(SAVE_KEY);
-if (saved && Array.isArray(saved.values) && saved.values.length === 81 && !saved.solved) {
-  state = saved;
-  render();
-  startTimer();
-} else {
-  newGame(load(DIFF_KEY, 'easy'));
+{
+  const level = load(LEVEL_KEY, 0);
+  const done = load(DONE_KEY, {});
+  const hasProgress = load(PROGRESS_KEY, {})[level];
+  // Reopen the last level; if it's already finished, move on to the next unfinished one.
+  openLevel(done[level] && !hasProgress ? nextUnfinished(level) : level);
 }
 
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
