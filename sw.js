@@ -1,5 +1,5 @@
 // Offline support: cache the app shell, serve cache-first, refresh in the background.
-const CACHE = 'sudoku-v4';
+const CACHE = 'sudoku-v5';
 const ASSETS = [
   './',
   'index.html',
@@ -17,7 +17,7 @@ const ASSETS = [
 ];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));
+  event.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS.map((u) => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (event) => {
@@ -39,7 +39,9 @@ self.addEventListener('fetch', (event) => {
   const sdk = url.hostname === 'www.gstatic.com' && url.pathname.startsWith('/firebasejs/');
   if (!own && !sdk) return;
 
-  const fromNetwork = () => fetch(request).then((res) => {
+  // `no-cache` revalidates with the server instead of trusting the browser's HTTP cache,
+  // so a new release is picked up immediately rather than after GitHub Pages' 10-minute cache.
+  const fromNetwork = () => fetch(request, own ? { cache: 'no-cache' } : undefined).then((res) => {
     if (res.ok) {
       const copy = res.clone();
       caches.open(CACHE).then((c) => c.put(request, copy));

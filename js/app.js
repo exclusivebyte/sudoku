@@ -719,6 +719,35 @@ cloud.onUserChanged((u) => {
   renderAccount();
 });
 
+// ---------- Updates ----------
+// Installed apps can stay open for days, so check for a new version when the app comes
+// back into view and every 30 minutes. A new version's service worker takes over straight
+// away (skipWaiting + clients.claim), which fires `controllerchange`; reload then so the
+// new code runs. Guests would lose unsaved progress, so they get a reload button instead.
+const UPDATE_CHECK_INTERVAL = 30 * 60 * 1000;
+
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-  navigator.serviceWorker.register('sw.js').catch(() => {});
+  const hadController = !!navigator.serviceWorker.controller;
+  let reloading = false;
+
+  navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then((reg) => {
+    if (!reg) return;
+    const check = () => reg.update().catch(() => {});
+    setInterval(check, UPDATE_CHECK_INTERVAL);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) check(); });
+  }).catch(() => {});
+
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController || reloading) return; // first install: already running the latest code
+    const guestWouldLose = cloud.isConfigured() && !user && (isInProgress() || hasAnything(game));
+    if (guestWouldLose) {
+      $('update-banner').hidden = false;
+      return;
+    }
+    reloading = true;
+    save(); // writes the local copy synchronously; the cloud catches up after reload
+    location.reload();
+  });
 }
+
+$('update-reload').addEventListener('click', () => location.reload());
