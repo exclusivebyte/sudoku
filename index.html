@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Sudoku</title>
+  <meta name="description" content="A clean, offline-ready Sudoku game.">
+  <meta name="theme-color" content="#f6f5f1" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#16181d" media="(prefers-color-scheme: dark)">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Sudoku">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <div class="title">
+        <h1>Sudoku</h1>
+        <select id="difficulty" aria-label="Difficulty">
+          <option value="easy">Easy</option>
+          <option value="medium">Medium</option>
+          <option value="hard">Hard</option>
+          <option value="expert">Expert</option>
+        </select>
+      </div>
+      <div class="status">
+        <span class="mistakes" id="mistakes" title="Mistakes">Mistakes: 0</span>
+        <button class="timer" id="timer" title="Pause / resume" aria-label="Pause or resume">00:00</button>
+        <button class="icon-btn" id="theme-btn" title="Toggle theme" aria-label="Toggle theme">
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <section class="board-wrap">
+      <div class="board" id="board" role="grid" aria-label="Sudoku board"></div>
+      <div class="overlay" id="pause-overlay" hidden>
+        <p>Paused</p>
+        <button class="primary" id="resume-btn">Resume</button>
+      </div>
+    </section>
+
+    <section class="controls">
+      <div class="actions">
+        <button class="action" id="undo-btn" title="Undo (Ctrl+Z)">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12.5 8c-2.65 0-5.05 1-6.9 2.6L2 7v9h9l-3.62-3.62A7.95 7.95 0 0 1 12.5 10.5c3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z"/></svg>
+          <span>Undo</span>
+        </button>
+        <button class="action" id="erase-btn" title="Erase (Backspace)">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M16.24 3.56l4.95 4.94a1.5 1.5 0 0 1 0 2.12L12 19.8h8V22H8.5l-5.7-5.7a1.5 1.5 0 0 1 0-2.12L14.12 3.56a1.5 1.5 0 0 1 2.12 0zM5 15.24L9.25 19.5H12l2.04-2.04-4.95-4.95L5 15.24z"/></svg>
+          <span>Erase</span>
+        </button>
+        <button class="action" id="notes-btn" title="Notes (N)" aria-pressed="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+          <span>Notes <em id="notes-state">off</em></span>
+        </button>
+        <button class="action" id="hint-btn" title="Hint (H)">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M9 21h6v-1H9v1zm3-19a7 7 0 0 0-4 12.74V17h8v-2.26A7 7 0 0 0 12 2z"/></svg>
+          <span>Hint</span>
+        </button>
+      </div>
+      <div class="numpad" id="numpad"></div>
+      <button class="primary new-game" id="new-btn">New game</button>
+    </section>
+  </main>
+
+  <dialog id="win-dialog">
+    <h2>Solved!</h2>
+    <p id="win-text"></p>
+    <form method="dialog" class="dialog-actions">
+      <button class="primary" value="new">New game</button>
+    </form>
+  </dialog>
+
+  <dialog id="confirm-dialog">
+    <h2>Start a new game?</h2>
+    <p>Your current progress will be lost.</p>
+    <form method="dialog" class="dialog-actions">
+      <button value="cancel">Cancel</button>
+      <button class="primary" value="ok">New game</button>
+    </form>
+  </dialog>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
